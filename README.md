@@ -90,7 +90,7 @@ the order value of all objects that were below the moved object by one.
 ## Subset Ordering
 
 In some cases, ordering objects is required only on a subset of objects. For example,
-an application that manages contact lists for users, in a many-to-one/many relationship,
+an application that manages contact lists for users, in a many-to-one relationship,
 would like to allow each user to order their contacts regardless of how other users
 choose their order. This option is supported via the `order_with_respect_to` parameter.
 
@@ -101,6 +101,25 @@ A simple example might look like so:
         phone = models.CharField()
         order_with_respect_to = 'user'
 
+In a many-to-many relationship you need to use a seperate through model which is derived from the OrderedModel.
+For example, an application which manages pizzas with toppings.
+
+A simple example might look like so:
+
+    class Topping(models.Model):
+        name = models.CharField(max_length=100)
+
+    class Pizza(models.Model):
+        name = models.CharField(max_length=100)
+        toppings = models.ManyToManyField(Topping, through='PizzaToppingsThroughModel')
+
+    class PizzaToppingsThroughModel(OrderedModel):
+        pizza = models.ForeignKey(Pizza)
+        topping = models.ForeignKey(Topping)
+        order_with_respect_to = 'pizza'
+
+        class Meta:
+            ordering = ('pizza', 'order')
 
 Admin integration
 -----------------
@@ -118,6 +137,31 @@ To add arrows in the admin change list page to do reordering, you can use the
     admin.site.register(Item, ItemAdmin)
 
 
+For a many-to-many relationship you need the following in the admin.py file:
+
+    from django.contrib import admin
+    from ordered_model.admin import OrderedTabularInline
+    from models import PizzaToppingThroughModel   
+
+    class PizzaToppingThroughModelInline(OrderedTabularInline):
+        model = PizzaToppingThroughModel
+        fields = ('topping', 'order', 'move_up_down_links',)
+        readonly_fields = ('order', 'move_up_down_links',)
+        extra = 1
+
+    class PizzaAdmin(admin.ModelAdmin):
+        list_display = ('name', )
+        inlines = (PizzaToppingThroughModelInline, )
+
+        def get_urls(self):
+            urls = super(PizzaAdmin, self).get_urls()
+            for inline in self.inlines:
+                if hasattr(inline, 'get_urls'):
+                    urls = inline.get_urls(self) + urls
+            return urls            
+
+    admin.site.register(Pizza, PizzaAdmin)
+            
 Test suite
 ----------
 
