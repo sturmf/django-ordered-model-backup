@@ -148,6 +148,7 @@ For a many-to-many relationship you need the following in the admin.py file:
         fields = ('topping', 'order', 'move_up_down_links',)
         readonly_fields = ('order', 'move_up_down_links',)
         extra = 1
+        ordering = ('order',)
 
     class PizzaAdmin(admin.ModelAdmin):
         list_display = ('name', )
