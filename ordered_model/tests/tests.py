@@ -1,5 +1,5 @@
 from django.test import TestCase
-from ordered_model.tests.models import Answer, Item, Question
+from ordered_model.tests.models import Answer, Item, Question, Pizza, Topping, PizzaToppingsThroughModel
 
 
 class OrderGenerationTests(TestCase):
@@ -169,4 +169,101 @@ class OrderWithRespectToTests(TestCase):
             Answer.objects.values_list('pk', 'order'), [
             (self.q1_a1.pk, 0), (self.q1_a2.pk, 1),
             (self.q2_a2.pk, 0), (self.q2_a1.pk, 1)
+        ])
+
+        
+class OrderWithRespectToTestsManyToMany(TestCase):
+    def setUp(self):
+        self.t1 = Topping.objects.create(name='tomatoe')
+        self.t2 = Topping.objects.create(name='mozarella')
+        self.t3 = Topping.objects.create(name='anchovy')
+        self.t4 = Topping.objects.create(name='mushrooms')
+        self.t5 = Topping.objects.create(name='ham')
+        self.p1 = Pizza.objects.create(name='Napoli') # tomatoe, mozarella, anchovy
+        self.p2 = Pizza.objects.create(name='Regina') # tomatoe, mozarella, mushrooms, ham
+        # Now put the toppings on the pizza
+        self.p1_t1 = PizzaToppingsThroughModel(pizza=self.p1, topping=self.t1)
+        self.p1_t1.save()
+        self.p1_t2 = PizzaToppingsThroughModel(pizza=self.p1, topping=self.t2)
+        self.p1_t2.save()
+        self.p1_t3 = PizzaToppingsThroughModel(pizza=self.p1, topping=self.t3)
+        self.p1_t3.save()
+        self.p2_t1 = PizzaToppingsThroughModel(pizza=self.p2, topping=self.t1)
+        self.p2_t1.save()
+        self.p2_t2 = PizzaToppingsThroughModel(pizza=self.p2, topping=self.t2)
+        self.p2_t2.save()
+        self.p2_t3 = PizzaToppingsThroughModel(pizza=self.p2, topping=self.t4)
+        self.p2_t3.save()
+        self.p2_t4 = PizzaToppingsThroughModel(pizza=self.p2, topping=self.t5)
+        self.p2_t4.save()
+
+    def test_saved_order(self):
+        self.assertSequenceEqual(
+            PizzaToppingsThroughModel.objects.values_list('topping__pk', 'order'), [
+            (self.p1_t1.topping.pk, 0), (self.p1_t2.topping.pk, 1), (self.p1_t3.topping.pk, 2),
+            (self.p2_t1.topping.pk, 0), (self.p2_t2.topping.pk, 1), (self.p2_t3.topping.pk, 2), (self.p2_t4.topping.pk, 3)
+        ])
+
+    def test_swap(self):
+        with self.assertRaises(ValueError):
+            self.p1_t1.swap([self.p2_t1])
+
+    def test_up(self):
+        self.p1_t2.up()
+        self.assertSequenceEqual(
+            PizzaToppingsThroughModel.objects.values_list('topping__pk', 'order'), [
+            (self.p1_t2.topping.pk, 0), (self.p1_t1.topping.pk, 1), (self.p1_t3.topping.pk, 2),
+            (self.p2_t1.topping.pk, 0), (self.p2_t2.topping.pk, 1), (self.p2_t3.topping.pk, 2), (self.p2_t4.topping.pk, 3)
+        ])
+
+    def test_down(self):
+        self.p2_t1.down()
+        self.assertSequenceEqual(
+            PizzaToppingsThroughModel.objects.values_list('topping__pk', 'order'), [
+            (self.p1_t1.topping.pk, 0), (self.p1_t2.topping.pk, 1), (self.p1_t3.topping.pk, 2),
+            (self.p2_t2.topping.pk, 0), (self.p2_t1.topping.pk, 1), (self.p2_t3.topping.pk, 2), (self.p2_t4.topping.pk, 3)
+        ])
+
+    def test_to(self):
+        self.p2_t1.to(1)
+        self.assertSequenceEqual(
+            PizzaToppingsThroughModel.objects.values_list('topping__pk', 'order'), [
+            (self.p1_t1.topping.pk, 0), (self.p1_t2.topping.pk, 1), (self.p1_t3.topping.pk, 2),
+            (self.p2_t2.topping.pk, 0), (self.p2_t1.topping.pk, 1), (self.p2_t3.topping.pk, 2), (self.p2_t4.topping.pk, 3)
+        ])
+
+    def test_above(self):
+        with self.assertRaises(ValueError):
+            self.p1_t2.above(self.p2_t1)
+        self.p1_t2.above(self.p1_t1)
+        self.assertSequenceEqual(
+            PizzaToppingsThroughModel.objects.values_list('topping__pk', 'order'), [
+            (self.p1_t2.topping.pk, 0), (self.p1_t1.topping.pk, 1), (self.p1_t3.topping.pk, 2),
+            (self.p2_t1.topping.pk, 0), (self.p2_t2.topping.pk, 1), (self.p2_t3.topping.pk, 2), (self.p2_t4.topping.pk, 3)
+        ])
+
+    def test_below(self):
+        with self.assertRaises(ValueError):
+            self.p2_t1.below(self.p1_t2)
+        self.p2_t1.below(self.p2_t2)
+        self.assertSequenceEqual(
+            PizzaToppingsThroughModel.objects.values_list('topping__pk', 'order'), [
+            (self.p1_t1.topping.pk, 0), (self.p1_t2.topping.pk, 1), (self.p1_t3.topping.pk, 2),
+            (self.p2_t2.topping.pk, 0), (self.p2_t1.topping.pk, 1), (self.p2_t3.topping.pk, 2), (self.p2_t4.topping.pk, 3)
+        ])
+
+    def test_top(self):
+        self.p1_t3.top()
+        self.assertSequenceEqual(
+            PizzaToppingsThroughModel.objects.values_list('topping__pk', 'order'), [
+            (self.p1_t3.topping.pk, 0), (self.p1_t1.topping.pk, 1), (self.p1_t2.topping.pk, 2),
+            (self.p2_t1.topping.pk, 0), (self.p2_t2.topping.pk, 1), (self.p2_t3.topping.pk, 2), (self.p2_t4.topping.pk, 3)
+        ])
+
+    def test_bottom(self):
+        self.p2_t1.bottom()
+        self.assertSequenceEqual(
+            PizzaToppingsThroughModel.objects.values_list('topping__pk', 'order'), [
+            (self.p1_t1.topping.pk, 0), (self.p1_t2.topping.pk, 1), (self.p1_t3.topping.pk, 2),
+            (self.p2_t2.topping.pk, 0), (self.p2_t3.topping.pk, 1), (self.p2_t4.topping.pk, 2), (self.p2_t1.topping.pk, 3)
         ])
